@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'package:share_plus/share_plus.dart';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -22,7 +23,15 @@ class _ExportScreenState extends State<ExportScreen> {
   Future<void> _initializeStorage() async {
     try {
       // Use Documents directory consistently with recording
-      final Directory documentsDir = await getApplicationDocumentsDirectory();
+      final Directory? documentsDir = await getExternalStorageDirectory();
+      
+      if (documentsDir == null) {
+        setState(() {
+          _storagePath = 'Error: Cannot access external storage';
+        });
+        return;
+      }
+
       final motionSensorDir = Directory('${documentsDir.path}/Motion Sensor App/files');
       
       if (!await motionSensorDir.exists()) {
@@ -350,17 +359,47 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   Future<void> _shareRecording(RecordingItem recording) async {
-    // TODO: Implement sharing using share_plus package
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Sharing ${recording.name}...')),
-    );
+    try {
+      final file = File(recording.filePath);
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Motion sensor recording - ${recording.name}',
+        subject: 'Motion Sensor Data',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sharing file: $e')),
+      );
+    }
   }
 
   Future<void> _exportRecording(RecordingItem recording) async {
-    // TODO: Implement export functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exporting ${recording.name}...')),
-    );
+    try {
+      final sourceFile = File(recording.filePath);
+      
+      // Get Downloads directory for easy access
+      final Directory? downloadsDir = await getDownloadsDirectory();
+      if (downloadsDir == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot access downloads directory')),
+        );
+        return;
+      }
+      
+      final destinationFile = File('${downloadsDir.path}/${recording.name}.csv');
+      await sourceFile.copy(destinationFile.path);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Exported to Downloads/${recording.name}.csv')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error exporting file: $e')),
+      );
+    }
   }
 
   Future<void> _deleteRecording(RecordingItem recording, int index) async {

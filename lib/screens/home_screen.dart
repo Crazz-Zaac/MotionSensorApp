@@ -166,9 +166,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _createRecordingFile() async {
     try {
-      // Get Documents directory instead of external storage
-      final Directory documentsDir = await getApplicationDocumentsDirectory();
-      final Directory motionSensorDir = Directory('${documentsDir.path}/Motion Sensor App/files');
+      // Use external storage directory instead of internal
+      final Directory? externalDir = await getExternalStorageDirectory();
+      if (externalDir == null) {
+        throw Exception('Cannot access external storage');
+      }
+
+      // Create the directory structure like HyperIMU
+      final Directory motionSensorDir = Directory('${externalDir.path}/Motion Sensor App/files');
       
       if (!await motionSensorDir.exists()) {
         await motionSensorDir.create(recursive: true);
@@ -199,6 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
       
     } catch (e) {
       debugPrint('Error creating recording file: $e');
+      // throw e;
     }
   }
 
