@@ -4,7 +4,7 @@ import 'package:motion_sensor_app/screens/activities_screen.dart';
 import 'package:motion_sensor_app/services/tts_service.dart';
 import 'dart:async';
 import 'dart:math';
-import 'dart:convert';
+// import 'dart:convert';
 import 'dart:io'; // Add this import
 import 'package:path_provider/path_provider.dart'; // Add this import
 
