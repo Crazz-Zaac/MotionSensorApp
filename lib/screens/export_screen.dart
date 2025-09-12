@@ -21,34 +21,23 @@ class _ExportScreenState extends State<ExportScreen> {
 
   Future<void> _initializeStorage() async {
     try {
-      Directory directory;
-
-      if (Platform.isAndroid) {
-        try {
-          directory = (await getExternalStorageDirectory())!;
-        } catch (_) {
-          directory = await getApplicationDocumentsDirectory();
-        }
-      } else {
-        directory = await getApplicationDocumentsDirectory();
-      }
-
-      final motionSensorDir = Directory('${directory.path}/MotionSensor');
+      // Use Documents directory consistently with recording
+      final Directory documentsDir = await getApplicationDocumentsDirectory();
+      final motionSensorDir = Directory('${documentsDir.path}/Motion Sensor App/files');
+      
       if (!await motionSensorDir.exists()) {
         await motionSensorDir.create(recursive: true);
       }
-
-      if (!mounted) return;
-
+      
       setState(() {
         _storagePath = motionSensorDir.path;
       });
-
+      
+      // Debug: Print the actual path
+      debugPrint('Export screen storage path: $_storagePath');
+      
       _refreshRecordings();
-
-      debugPrint('Storage path set to: $_storagePath');
     } catch (e) {
-      if (!mounted) return;
       debugPrint('Error initializing storage: $e');
       setState(() {
         _storagePath = 'Error: $e';
@@ -56,47 +45,73 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
-
-  Future<void> _refreshRecordings() async {
-    if (_storagePath.isEmpty) return;
-
-    final dir = Directory(_storagePath);
-    if (await dir.exists()) {
-      final files = await dir.list().where((entity) => entity.path.endsWith('.csv')).toList();
-      
-      final List<RecordingItem> recordings = [];
-      
-      for (var file in files) {
-        if (file is File) {
-          final stat = await file.stat();
-          recordings.add(RecordingItem(
-            name: file.uri.pathSegments.last.replaceAll('.csv', ''),
-            size: '${(stat.size / (1024 * 1024)).toStringAsFixed(1)} MB',
-            timestamp: stat.modified,
-            filePath: file.path,
-          ));
-        }
-      }
-      
-      setState(() {
-        _recordings = recordings;
-      });
-    }
-  }
-
   String get _displayPath {
     if (_storagePath.isEmpty) return 'Loading...';
     
-    // Convert to user-friendly path for display
-    if (_storagePath.contains('/storage/emulated/0/')) {
-      return _storagePath.replaceFirst('/storage/emulated/0/', '/Internal Storage/');
-    } else if (_storagePath.contains('/Android/data/')) {
-      // Show app-specific directory path
-      return 'App Documents/MotionSensor';
+    // Show user-friendly path
+    if (_storagePath.contains('/Motion Sensor App/files')) {
+      return 'Documents/Motion Sensor App/files/';
     }
     
     return _storagePath;
   }
+
+
+  Future<void> _refreshRecordings() async {
+  if (_storagePath.isEmpty) return;
+
+  try {
+    final dir = Directory(_storagePath);
+    if (!await dir.exists()) {
+      debugPrint('Directory does not exist: $_storagePath');
+      setState(() {
+        _recordings = [];
+      });
+      return;
+    }
+
+    final files = await dir.list().toList();
+    final csvFiles = files.where((entity) => 
+      entity is File && entity.path.toLowerCase().endsWith('.csv')
+    ).cast<File>().toList();
+    
+    debugPrint('Found ${csvFiles.length} CSV files in $_storagePath');
+    
+    final List<RecordingItem> recordings = [];
+    
+    for (var file in csvFiles) {
+      try {
+        final stat = await file.stat();
+        final fileName = file.uri.pathSegments.last.replaceAll('.csv', '');
+        
+        recordings.add(RecordingItem(
+          name: fileName,
+          size: '${(stat.size / (1024 * 1024)).toStringAsFixed(1)} MB',
+          timestamp: stat.modified,
+          filePath: file.path,
+        ));
+        
+        debugPrint('Added recording: $fileName (${stat.size} bytes)');
+      } catch (e) {
+        debugPrint('Error processing file ${file.path}: $e');
+      }
+    }
+    
+    // Sort by timestamp (newest first)
+    recordings.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    
+    setState(() {
+      _recordings = recordings;
+    });
+    
+    debugPrint('Loaded ${recordings.length} recordings');
+  } catch (e) {
+    debugPrint('Error refreshing recordings: $e');
+    setState(() {
+      _recordings = [];
+    });
+  }
+}
 
   @override
   Widget build(BuildContext context) {

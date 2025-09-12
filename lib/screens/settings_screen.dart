@@ -26,7 +26,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // TTS settings
   bool _enableTTS = true;
   double _ttsVolume = 1.0;
-  double _ttsSpeed = 1.0;
+  double _ttsSpeed = 0.5;
 
   @override
   Widget build(BuildContext context) {
@@ -154,13 +154,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   '',
                   (value) => setState(() => _ttsVolume = value),
                 ),
+                // Updated TTS Speed with better range
                 _buildSliderSetting(
                   'TTS Speed',
                   _ttsSpeed,
-                  0.5,
-                  2.0,
+                  0.3,  // Much slower minimum
+                  1.5,  // Reasonable maximum
                   'x',
                   (value) => setState(() => _ttsSpeed = value),
+                ),
+                // Show current speed value
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    'Current speed: ${_ttsSpeed.toStringAsFixed(1)}x',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ],
             ],
@@ -267,7 +276,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _useForegroundService = true;
                   _enableTTS = true;
                   _ttsVolume = 1.0;
-                  _ttsSpeed = 1.0;
+                  _ttsSpeed = 0.5; // Slower default
                 });
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(

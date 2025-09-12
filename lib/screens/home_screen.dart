@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:motion_sensor_app/screens/activities_screen.dart'; // Add this import
-// import 'package:flutter_tts/flutter_tts.dart';
-import 'package:motion_sensor_app/services/tts_service.dart'; // Import your TTS service
+import 'package:motion_sensor_app/screens/activities_screen.dart';
+import 'package:motion_sensor_app/services/tts_service.dart';
 import 'dart:async';
 import 'dart:math';
+import 'dart:convert';
+import 'dart:io'; // Add this import
+import 'package:path_provider/path_provider.dart'; // Add this import
 
 class HomeScreen extends StatefulWidget {
   final List<ActivityItem> activities; 
@@ -33,6 +35,13 @@ class _HomeScreenState extends State<HomeScreen> {
   int _elapsedSeconds = 0;
   int _remainingSeconds = 0;
   int _totalDuration = 0;
+  int _currentActivityIndex = 0;
+
+  File? _currentRecordingFile;
+  // int _recordingStartTime = 0;
+  final List<String> _csvBuffer = [];
+  final int _bufferFlushSize = 100; // Flush buffer every 100 entries
+
   
    List<Map<String, dynamic>> get _activitySequence {
     return widget.activities.map((activity) {
@@ -94,7 +103,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _initializeTTS() async {
-    await _ttsService.initialize();
+    await _ttsService.initialize(
+      enabled: true,
+      volume: 1.0,
+      speechRate: 0.5, // Much slower default
+    );
   }
 
   Future<void> _startRecording() async {
@@ -106,6 +119,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     try {
+
+      await _createRecordingFile();
+
       // Start sensors
       await _sensorChannel.invokeMethod('startSensors', {'samplingRates': _samplingRates});
       
@@ -118,41 +134,81 @@ class _HomeScreenState extends State<HomeScreen> {
           _processSensorData(data);
         },
         onError: (error) {
-          // print('Sensor stream error: $error');
+          debugPrint('Sensor stream error: $error');
         },
       );
       
       setState(() {
         _isRecording = true;
         _elapsedSeconds = 0;
-        // _currentActivityIndex = 0;  
+        _currentActivityIndex = 0;  
         _currentActivity = _activitySequence[0]['name'];
         _remainingSeconds = _totalDuration;
       });
 
+      // _recordingStartTime = DateTime.now().millisecondsSinceEpoch;
+
       // Initial announcement
       final firstActivity = _activitySequence[0]['name'];
       final firstDuration = _activitySequence[0]['duration'];
-      await _ttsService.speak('Get ready to $firstActivity for $firstDuration seconds');
+      await _ttsService.speak('Starting recording. Begin $firstActivity for $firstDuration seconds');
       
       _startTimers();
       
     } catch (e) {
-      // print('Error starting recording: $e');
+      if (!mounted) return;
+      debugPrint('Error starting recording: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error starting recording: $e')),
+      );
     }
   }
 
-  // Future<void> _safeSpeak(String text) async {
-  //   try {
-  //     await _ttsService.speak(text);
-  //   } catch (e) {
-  //     // print('TTS error: $e');
-  //     // You can show a visual indicator if TTS fails
-  //   }
-  // }
+  Future<void> _createRecordingFile() async {
+    try {
+      // Get Documents directory instead of external storage
+      final Directory documentsDir = await getApplicationDocumentsDirectory();
+      final Directory motionSensorDir = Directory('${documentsDir.path}/Motion Sensor App/files');
+      
+      if (!await motionSensorDir.exists()) {
+        await motionSensorDir.create(recursive: true);
+      }
+
+      // Create filename with timestamp
+      final String timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+      final String filename = 'motion_data_$timestamp.csv';
+      
+      _currentRecordingFile = File('${motionSensorDir.path}/$filename');
+      
+      // Write CSV header
+      final List<String> headers = [
+        'timestamp_ms',
+        'elapsed_seconds',
+        'current_activity',
+        'sensor_type',
+        'value_x',
+        'value_y', 
+        'value_z',
+        'magnitude'
+      ];
+      
+      await _currentRecordingFile!.writeAsString('${headers.join(',')}\n');
+      _csvBuffer.clear();
+      
+      debugPrint('Created recording file: ${_currentRecordingFile!.path}');
+      
+    } catch (e) {
+      debugPrint('Error creating recording file: $e');
+    }
+  }
 
   Future<void> _stopRecording() async {
     try {
+
+      if (_csvBuffer.isNotEmpty) {
+        await _flushCsvBuffer();
+      }
+
       await _sensorChannel.invokeMethod('stopSensors');
       await _serviceChannel.invokeMethod('stopService');
       
@@ -171,6 +227,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_elapsedSeconds < _totalDuration) {
         await _ttsService.speak('Recording stopped manually');
       }
+
+      debugPrint('Recording saved to: ${_currentRecordingFile?.path}');
       
       setState(() {
         _isRecording = false;
@@ -179,11 +237,13 @@ class _HomeScreenState extends State<HomeScreen> {
         _remainingSeconds = _totalDuration;
         _accelerometerData.clear();
         _gyroscopeData.clear();
-        // _currentActivityIndex = 0;
+        _currentActivityIndex = 0;
       });
+    
+    _currentRecordingFile = null;
       
     } catch (e) {
-      // Handle error
+      debugPrint('Error stopping recording: $e');
     }
   }
 
@@ -224,7 +284,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final int preNoticeTime = accumulatedTime + (activityDuration * 0.5).round();
         
         Timer preNoticeTimer = Timer(Duration(seconds: preNoticeTime), () {
-          if (_isRecording) { // Only announce if still recording
+          if (_isRecording && _currentActivityIndex == i) { // Only announce if still recording
             _ttsService.speak('Get ready to $nextActivity');
           }
         });
@@ -237,97 +297,96 @@ class _HomeScreenState extends State<HomeScreen> {
       if (i < _activitySequence.length - 1) {
         // Schedule activity switch announcement
         final nextActivity = _activitySequence[i + 1]['name'];
+        final nextDuration = _activitySequence[i + 1]['duration'];
         Timer switchTimer = Timer(Duration(seconds: accumulatedTime), () {
           if (_isRecording) { // Only announce if still recording
-            _ttsService.speak('Start $nextActivity now');
+            _ttsService.speak('Start $nextActivity now for $nextDuration seconds');
             
             setState(() {
-              // _currentActivityIndex = i + 1;
+              _currentActivityIndex = i + 1;
               _currentActivity = nextActivity;
             });
           }
         });
         _scheduledTimers.add(switchTimer);
       } else {
-        // Schedule final announcement
-        Timer endTimer = Timer(Duration(seconds: accumulatedTime), () {
+          // Schedule final announcement
+          Timer endTimer = Timer(Duration(seconds: accumulatedTime), () {
           if (_isRecording) {
             _ttsService.speak('End of recording');
+            // Auto-stop after a brief delay
+            Timer(const Duration(seconds: 2), () {
+              if (_isRecording) {
+                _stopRecording();
+              }
+            });
           }
         });
         _scheduledTimers.add(endTimer);
       }
     }
   }
-
-  // void _schedulePreNotices() {
-  //   int accumulatedTime = 0;
-    
-  //   for (int i = 0; i < _activitySequence.length; i++) {
-  //     final activity = _activitySequence[i];
-  //     final int activityDuration = activity['duration'];
-  //     final int preNoticeTime = accumulatedTime + (activityDuration * 0.5).round();
-      
-  //     if (i < _activitySequence.length - 1) { // Not the last activity
-  //       final nextActivity = _activitySequence[i + 1]['name'];
-        
-  //       _preNoticeTimer = Timer(Duration(seconds: preNoticeTime), () {
-  //         _ttsService.speak('Get ready to $nextActivity');
-  //       });
-  //     }
-      
-  //     accumulatedTime += activityDuration;
-  //   }
-  // }
-
-  // void _scheduleActivitySwitches() {
-  //   int accumulatedTime = 0;
-    
-  //   for (int i = 0; i < _activitySequence.length; i++) {
-  //     final int activityDuration = _activitySequence[i]['duration'];
-  //     accumulatedTime += activityDuration;
-      
-  //     if (i < _activitySequence.length - 1) {
-  //       // Schedule activity switch announcement
-  //       Timer(Duration(seconds: accumulatedTime), () {
-  //         final nextActivity = _activitySequence[i + 1]['name'];
-  //         _ttsService.speak('Start $nextActivity now');
-          
-  //         setState(() {
-  //           _currentActivityIndex = i + 1;
-  //           _currentActivity = nextActivity;
-  //         });
-  //       });
-  //     } else {
-  //       // Schedule final announcement
-  //       Timer(Duration(seconds: accumulatedTime), () {
-  //         _ttsService.speak('End of recording');
-  //       });
-  //     }
-  //   }
-  // }
-
   
   void _processSensorData(Map<dynamic, dynamic> data) {
+    if (!_isRecording || _currentRecordingFile == null) return;
+    
     String sensorType = data['sensorType'];
     List<dynamic> values = data['values'];
     
-    if (sensorType == 'accelerometer' && values.length >= 3) {
-      double magnitude = sqrt(values[0] * values[0] + values[1] * values[1] + values[2] * values[2]);
-      setState(() {
-        _accelerometerData.add(magnitude);
-        if (_accelerometerData.length > _maxDataPoints) {
-          _accelerometerData.removeAt(0);
-        }
-      });
-    } else if (sensorType == 'gyroscope' && values.length >= 3) {
-      double magnitude = sqrt(values[0] * values[0] + values[1] * values[1] + values[2] * values[2]);
-      setState(() {
-        _gyroscopeData.add(magnitude);
-        if (_gyroscopeData.length > _maxDataPoints) {
-          _gyroscopeData.removeAt(0);
-        }
-      });
+    if (values.length >= 3) {
+      final double x = values[0].toDouble();
+      final double y = values[1].toDouble(); 
+      final double z = values[2].toDouble();
+      final double magnitude = sqrt(x * x + y * y + z * z);
+      
+      // Add to CSV buffer
+      final int currentTimeMs = DateTime.now().millisecondsSinceEpoch;
+      final List<String> row = [
+        currentTimeMs.toString(),
+        _elapsedSeconds.toString(),
+        _currentActivity,
+        sensorType,
+        x.toStringAsFixed(6),
+        y.toStringAsFixed(6),
+        z.toStringAsFixed(6),
+        magnitude.toStringAsFixed(6)
+      ];
+      
+      _csvBuffer.add(row.join(','));
+      
+      // Flush buffer periodically
+      if (_csvBuffer.length >= _bufferFlushSize) {
+        _flushCsvBuffer();
+      }
+      
+      // Update UI data for live plotting
+      if (sensorType == 'accelerometer') {
+        setState(() {
+          _accelerometerData.add(magnitude);
+          if (_accelerometerData.length > _maxDataPoints) {
+            _accelerometerData.removeAt(0);
+          }
+        });
+      } else if (sensorType == 'gyroscope') {
+        setState(() {
+          _gyroscopeData.add(magnitude);
+          if (_gyroscopeData.length > _maxDataPoints) {
+            _gyroscopeData.removeAt(0);
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _flushCsvBuffer() async {
+    if (_csvBuffer.isEmpty || _currentRecordingFile == null) return;
+    
+    try {
+      final String csvData = '${_csvBuffer.join('\n')}\n';
+      await _currentRecordingFile!.writeAsString(csvData, mode: FileMode.append);
+      _csvBuffer.clear();
+    } catch (e) {
+      debugPrint('Error flushing CSV buffer: $e');
     }
   }
 
