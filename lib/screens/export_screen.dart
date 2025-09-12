@@ -60,7 +60,7 @@ class _ExportScreenState extends State<ExportScreen> {
                   const SizedBox(height: 8),
                   Text('Total Recordings: ${_recordings.length}'),
                   Text('Total Size: ${_getTotalSize()}'),
-                  Text('Storage Path: /storage/emulated/0/MotionSensor/'),
+                  const Text('Storage Path: /storage/emulated/0/MotionSensor/'),
                 ],
               ),
             ),

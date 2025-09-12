@@ -39,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final int _maxDataPoints = 100;
   
   // Sampling rates
-  Map<String, int> _samplingRates = {
+  final Map<String, int> _samplingRates = {
     'accelerometer': 50,
     'gyroscope': 50,
     'magnetometer': 50,
