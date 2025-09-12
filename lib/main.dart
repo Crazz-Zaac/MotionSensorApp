@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+// import 'package:flutter/foundation.dart';
 import 'screens/home_screen.dart';
 import 'screens/activities_screen.dart';
 import 'screens/export_screen.dart';
@@ -83,6 +84,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       });
       setState(() {
         _selectedIndex = 0; // Switch back to Home tab
+      });
+    }else{
+      debugPrint('No valid result returned from ActivitiesScreen');
+      // Still switch back to Home tab
+      setState(() {
+        _selectedIndex = 0;
       });
     }
   }
