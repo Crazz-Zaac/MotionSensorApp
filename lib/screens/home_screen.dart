@@ -37,6 +37,13 @@ class _HomeScreenState extends State<HomeScreen> {
   int _totalDuration = 0;
   int _currentActivityIndex = 0;
 
+  // Add these fields to your class
+  final Map<String, List<double>> _latestSensorReadings = {
+    'accelerometer': [0.0, 0.0, 0.0],
+    'gyroscope': [0.0, 0.0, 0.0],
+  };
+  DateTime? _lastCombinedRowTime;
+
   File? _currentRecordingFile;
   // int _recordingStartTime = 0;
   final List<String> _csvBuffer = [];
@@ -190,11 +197,14 @@ class _HomeScreenState extends State<HomeScreen> {
         'timestamp_ms',
         'elapsed_seconds',
         'current_activity',
-        'sensor_type',
-        'value_x',
-        'value_y', 
-        'value_z',
-        'magnitude'
+        'accelerometer_x',
+        'accelerometer_y', 
+        'accelerometer_z',
+        'gyroscope_x',
+        'gyroscope_y', 
+        'gyroscope_z',
+        'magnitude_accel',
+        'magnitude_gyro'
       ];
       
       await _currentRecordingFile!.writeAsString('${headers.join(',')}\n');
@@ -345,25 +355,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final double z = values[2].toDouble();
       final double magnitude = sqrt(x * x + y * y + z * z);
       
-      // Add to CSV buffer
-      final int currentTimeMs = DateTime.now().millisecondsSinceEpoch;
-      final List<String> row = [
-        currentTimeMs.toString(),
-        _elapsedSeconds.toString(),
-        _currentActivity,
-        sensorType,
-        x.toStringAsFixed(6),
-        y.toStringAsFixed(6),
-        z.toStringAsFixed(6),
-        magnitude.toStringAsFixed(6)
-      ];
-      
-      _csvBuffer.add(row.join(','));
-      
-      // Flush buffer periodically
-      if (_csvBuffer.length >= _bufferFlushSize) {
-        _flushCsvBuffer();
-      }
+      // Store the latest readings
+      _latestSensorReadings[sensorType] = [x, y, z];
       
       // Update UI data for live plotting
       if (sensorType == 'accelerometer') {
@@ -381,6 +374,45 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         });
       }
+      
+      // Create combined rows periodically (e.g., every 100ms)
+      final now = DateTime.now();
+      if (_lastCombinedRowTime == null || 
+          now.difference(_lastCombinedRowTime!) > const Duration(milliseconds: 100)) {
+        _addCombinedRowToBuffer();
+        _lastCombinedRowTime = now;
+      }
+    }
+  }
+
+  void _addCombinedRowToBuffer() {
+    final accel = _latestSensorReadings['accelerometer']!;
+    final gyro = _latestSensorReadings['gyroscope']!;
+    
+    final double accelMagnitude = sqrt(accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2]);
+    final double gyroMagnitude = sqrt(gyro[0] * gyro[0] + gyro[1] * gyro[1] + gyro[2] * gyro[2]);
+    
+    // Add to CSV buffer
+    final int currentTimeMs = DateTime.now().millisecondsSinceEpoch;
+    final List<String> row = [
+      currentTimeMs.toString(),
+      _elapsedSeconds.toString(),
+      _currentActivity,
+      accel[0].toStringAsFixed(6),  // accelerometer_x
+      accel[1].toStringAsFixed(6),  // accelerometer_y
+      accel[2].toStringAsFixed(6),  // accelerometer_z
+      gyro[0].toStringAsFixed(6),   // gyroscope_x
+      gyro[1].toStringAsFixed(6),   // gyroscope_y
+      gyro[2].toStringAsFixed(6),   // gyroscope_z
+      accelMagnitude.toStringAsFixed(6),  // magnitude_accel
+      gyroMagnitude.toStringAsFixed(6),   // magnitude_gyro
+    ];
+    
+    _csvBuffer.add(row.join(','));
+    
+    // Flush buffer periodically
+    if (_csvBuffer.length >= _bufferFlushSize) {
+      _flushCsvBuffer();
     }
   }
 
