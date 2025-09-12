@@ -20,17 +20,42 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   Future<void> _initializeStorage() async {
-    // Get the correct storage directory
-    final directory = await getExternalStorageDirectory();
-    if (directory != null) {
+    try {
+      Directory directory;
+
+      if (Platform.isAndroid) {
+        try {
+          directory = (await getExternalStorageDirectory())!;
+        } catch (_) {
+          directory = await getApplicationDocumentsDirectory();
+        }
+      } else {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
       final motionSensorDir = Directory('${directory.path}/MotionSensor');
       if (!await motionSensorDir.exists()) {
         await motionSensorDir.create(recursive: true);
       }
-      _storagePath = motionSensorDir.path;
+
+      if (!mounted) return;
+
+      setState(() {
+        _storagePath = motionSensorDir.path;
+      });
+
       _refreshRecordings();
+
+      debugPrint('Storage path set to: $_storagePath');
+    } catch (e) {
+      if (!mounted) return;
+      debugPrint('Error initializing storage: $e');
+      setState(() {
+        _storagePath = 'Error: $e';
+      });
     }
   }
+
 
   Future<void> _refreshRecordings() async {
     if (_storagePath.isEmpty) return;
@@ -59,6 +84,20 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
+  String get _displayPath {
+    if (_storagePath.isEmpty) return 'Loading...';
+    
+    // Convert to user-friendly path for display
+    if (_storagePath.contains('/storage/emulated/0/')) {
+      return _storagePath.replaceFirst('/storage/emulated/0/', '/Internal Storage/');
+    } else if (_storagePath.contains('/Android/data/')) {
+      // Show app-specific directory path
+      return 'App Documents/MotionSensor';
+    }
+    
+    return _storagePath;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -69,6 +108,10 @@ class _ExportScreenState extends State<ExportScreen> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _refreshRecordings,
+          ),
+          IconButton(
+            icon: const Icon(Icons.info),
+            onPressed: _showPathInfo,
           ),
         ],
       ),
@@ -167,6 +210,37 @@ class _ExportScreenState extends State<ExportScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showPathInfo() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Storage Information'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Full Path:', style: TextStyle(fontWeight: FontWeight.bold)),
+              SelectableText(_storagePath),
+              const SizedBox(height: 16),
+              const Text('Display Path:', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(_displayPath),
+              const SizedBox(height: 16),
+              Text('Directory exists: ${_storagePath.isNotEmpty ? Directory(_storagePath).existsSync() : false}'),
+              Text('Platform: ${Platform.operatingSystem}'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 

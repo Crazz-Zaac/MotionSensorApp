@@ -20,6 +20,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const EventChannel _sensorStream = EventChannel('motion_sensor_app/sensor_stream');
 
   final TTSService _ttsService = TTSService();
+  List<Timer> _scheduledTimers = []; // Add this to track all timers
   Timer? _preNoticeTimer;
   
   StreamSubscription<dynamic>? _sensorSubscription;
@@ -68,8 +69,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _sensorSubscription?.cancel();
     _recordingTimer?.cancel();
     _activityTimer?.cancel();
-    _ttsService.dispose();
     _preNoticeTimer?.cancel();
+    
+    // Cancel all scheduled timers
+    for (var timer in _scheduledTimers) {
+      timer.cancel();
+    }
+    _scheduledTimers.clear();
+    
+    _ttsService.dispose();
     super.dispose();
   }
 
@@ -151,9 +159,17 @@ class _HomeScreenState extends State<HomeScreen> {
       _recordingTimer?.cancel();
       _activityTimer?.cancel();
       _preNoticeTimer?.cancel();
+      
+      // Cancel all scheduled timers
+      for (var timer in _scheduledTimers) {
+        timer.cancel();
+      }
+      _scheduledTimers.clear();
 
-      // Announce manual stop
-      await _ttsService.speak('Recording stopped manually');
+      // Announce manual stop only if manually stopped (not at natural end)
+      if (_elapsedSeconds < _totalDuration) {
+        await _ttsService.speak('Recording stopped manually');
+      }
       
       setState(() {
         _isRecording = false;
@@ -162,19 +178,23 @@ class _HomeScreenState extends State<HomeScreen> {
         _remainingSeconds = _totalDuration;
         _accelerometerData.clear();
         _gyroscopeData.clear();
+        _currentActivityIndex = 0;
       });
       
     } catch (e) {
-      // print('Error stopping recording: $e');
+      // Handle error
     }
   }
 
   void _startTimers() {
-  // Schedule pre-notices only once at the beginning
-    _schedulePreNotices();
+    // Clear any existing scheduled timers
+    for (var timer in _scheduledTimers) {
+      timer.cancel();
+    }
+    _scheduledTimers.clear();
     
-    // Schedule activity completion checks only once
-    _scheduleActivitySwitches();
+    // Schedule all announcements upfront
+    _scheduleAllAnnouncements();
     
     // Main recording timer - only for UI updates and final check
     _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -189,52 +209,102 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-void _schedulePreNotices() {
-  int accumulatedTime = 0;
-  
-  for (int i = 0; i < _activitySequence.length; i++) {
-    final activity = _activitySequence[i];
-    final int activityDuration = activity['duration'];
-    final int preNoticeTime = accumulatedTime + (activityDuration * 0.5).round();
+  void _scheduleAllAnnouncements() {
+    int accumulatedTime = 0;
     
-    if (i < _activitySequence.length - 1) { // Not the last activity
-      final nextActivity = _activitySequence[i + 1]['name'];
+    for (int i = 0; i < _activitySequence.length; i++) {
+      final activity = _activitySequence[i];
+      final int activityDuration = activity['duration'];
+      final String activityName = activity['name'];
       
-      _preNoticeTimer = Timer(Duration(seconds: preNoticeTime), () {
-        _ttsService.speak('Get ready to $nextActivity');
-      });
-    }
-    
-    accumulatedTime += activityDuration;
-  }
-}
-
-void _scheduleActivitySwitches() {
-  int accumulatedTime = 0;
-  
-  for (int i = 0; i < _activitySequence.length; i++) {
-    final int activityDuration = _activitySequence[i]['duration'];
-    accumulatedTime += activityDuration;
-    
-    if (i < _activitySequence.length - 1) {
-      // Schedule activity switch announcement
-      Timer(Duration(seconds: accumulatedTime), () {
+      // Schedule pre-notice (at 50% of activity duration)
+      if (i < _activitySequence.length - 1) { // Not the last activity
         final nextActivity = _activitySequence[i + 1]['name'];
-        _ttsService.speak('Start $nextActivity now');
+        final int preNoticeTime = accumulatedTime + (activityDuration * 0.5).round();
         
-        setState(() {
-          _currentActivityIndex = i + 1;
-          _currentActivity = nextActivity;
+        Timer preNoticeTimer = Timer(Duration(seconds: preNoticeTime), () {
+          if (_isRecording) { // Only announce if still recording
+            _ttsService.speak('Get ready to $nextActivity');
+          }
         });
-      });
-    } else {
-      // Schedule final announcement
-      Timer(Duration(seconds: accumulatedTime), () {
-        _ttsService.speak('End of recording');
-      });
+        _scheduledTimers.add(preNoticeTimer);
+      }
+      
+      // Schedule activity switch (at end of current activity)
+      accumulatedTime += activityDuration;
+      
+      if (i < _activitySequence.length - 1) {
+        // Schedule activity switch announcement
+        final nextActivity = _activitySequence[i + 1]['name'];
+        Timer switchTimer = Timer(Duration(seconds: accumulatedTime), () {
+          if (_isRecording) { // Only announce if still recording
+            _ttsService.speak('Start $nextActivity now');
+            
+            setState(() {
+              _currentActivityIndex = i + 1;
+              _currentActivity = nextActivity;
+            });
+          }
+        });
+        _scheduledTimers.add(switchTimer);
+      } else {
+        // Schedule final announcement
+        Timer endTimer = Timer(Duration(seconds: accumulatedTime), () {
+          if (_isRecording) {
+            _ttsService.speak('End of recording');
+          }
+        });
+        _scheduledTimers.add(endTimer);
+      }
     }
   }
-}
+
+  // void _schedulePreNotices() {
+  //   int accumulatedTime = 0;
+    
+  //   for (int i = 0; i < _activitySequence.length; i++) {
+  //     final activity = _activitySequence[i];
+  //     final int activityDuration = activity['duration'];
+  //     final int preNoticeTime = accumulatedTime + (activityDuration * 0.5).round();
+      
+  //     if (i < _activitySequence.length - 1) { // Not the last activity
+  //       final nextActivity = _activitySequence[i + 1]['name'];
+        
+  //       _preNoticeTimer = Timer(Duration(seconds: preNoticeTime), () {
+  //         _ttsService.speak('Get ready to $nextActivity');
+  //       });
+  //     }
+      
+  //     accumulatedTime += activityDuration;
+  //   }
+  // }
+
+  // void _scheduleActivitySwitches() {
+  //   int accumulatedTime = 0;
+    
+  //   for (int i = 0; i < _activitySequence.length; i++) {
+  //     final int activityDuration = _activitySequence[i]['duration'];
+  //     accumulatedTime += activityDuration;
+      
+  //     if (i < _activitySequence.length - 1) {
+  //       // Schedule activity switch announcement
+  //       Timer(Duration(seconds: accumulatedTime), () {
+  //         final nextActivity = _activitySequence[i + 1]['name'];
+  //         _ttsService.speak('Start $nextActivity now');
+          
+  //         setState(() {
+  //           _currentActivityIndex = i + 1;
+  //           _currentActivity = nextActivity;
+  //         });
+  //       });
+  //     } else {
+  //       // Schedule final announcement
+  //       Timer(Duration(seconds: accumulatedTime), () {
+  //         _ttsService.speak('End of recording');
+  //       });
+  //     }
+  //   }
+  // }
 
   
   void _processSensorData(Map<dynamic, dynamic> data) {
