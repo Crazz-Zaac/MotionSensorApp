@@ -79,6 +79,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (result != null && result is List<ActivityItem>) {
       setState(() {
         _activities = result;
+        debugPrint('Updated activities: ${_activities.length} items');
+      });
+      setState(() {
+        _selectedIndex = 0; // Switch back to Home tab
       });
     }
   }
