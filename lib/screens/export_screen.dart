@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-// Remove unused import: import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -9,26 +10,54 @@ class ExportScreen extends StatefulWidget {
 }
 
 class _ExportScreenState extends State<ExportScreen> {
-  final List<RecordingItem> _recordings = [ // Added 'final' here
-    RecordingItem(
-      name: 'Recording_2024_01_15_10_30',
-      size: '2.5 MB',
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      filePath: '/storage/emulated/0/MotionSensor/Recording_2024_01_15_10_30.csv',
-    ),
-    RecordingItem(
-      name: 'Recording_2024_01_15_09_15',
-      size: '1.8 MB',
-      timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-      filePath: '/storage/emulated/0/MotionSensor/Recording_2024_01_15_09_15.csv',
-    ),
-    RecordingItem(
-      name: 'Recording_2024_01_14_16_45',
-      size: '3.2 MB',
-      timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      filePath: '/storage/emulated/0/MotionSensor/Recording_2024_01_14_16_45.csv',
-    ),
-  ];
+  List<RecordingItem> _recordings = [];
+  String _storagePath = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeStorage();
+  }
+
+  Future<void> _initializeStorage() async {
+    // Get the correct storage directory
+    final directory = await getExternalStorageDirectory();
+    if (directory != null) {
+      final motionSensorDir = Directory('${directory.path}/MotionSensor');
+      if (!await motionSensorDir.exists()) {
+        await motionSensorDir.create(recursive: true);
+      }
+      _storagePath = motionSensorDir.path;
+      _refreshRecordings();
+    }
+  }
+
+  Future<void> _refreshRecordings() async {
+    if (_storagePath.isEmpty) return;
+
+    final dir = Directory(_storagePath);
+    if (await dir.exists()) {
+      final files = await dir.list().where((entity) => entity.path.endsWith('.csv')).toList();
+      
+      final List<RecordingItem> recordings = [];
+      
+      for (var file in files) {
+        if (file is File) {
+          final stat = await file.stat();
+          recordings.add(RecordingItem(
+            name: file.uri.pathSegments.last.replaceAll('.csv', ''),
+            size: '${(stat.size / (1024 * 1024)).toStringAsFixed(1)} MB',
+            timestamp: stat.modified,
+            filePath: file.path,
+          ));
+        }
+      }
+      
+      setState(() {
+        _recordings = recordings;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +89,7 @@ class _ExportScreenState extends State<ExportScreen> {
                   const SizedBox(height: 8),
                   Text('Total Recordings: ${_recordings.length}'),
                   Text('Total Size: ${_getTotalSize()}'),
-                  const Text('Storage Path: /storage/emulated/0/MotionSensor/'),
+                  Text('Storage Path: $_storagePath'),
                 ],
               ),
             ),
@@ -142,7 +171,6 @@ class _ExportScreenState extends State<ExportScreen> {
   }
 
   String _getTotalSize() {
-    // Calculate total size from all recordings
     double totalMB = 0;
     for (var recording in _recordings) {
       String sizeStr = recording.size.replaceAll(' MB', '');
@@ -153,16 +181,6 @@ class _ExportScreenState extends State<ExportScreen> {
 
   String _formatDateTime(DateTime dateTime) {
     return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _refreshRecordings() {
-    // TODO: Implement actual file system scanning
-    setState(() {
-      // Simulate refresh
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Recordings refreshed')),
-    );
   }
 
   void _handleMenuAction(String action, RecordingItem recording, int index) {
@@ -182,100 +200,101 @@ class _ExportScreenState extends State<ExportScreen> {
     }
   }
 
-  void _previewRecording(RecordingItem recording) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Preview: ${recording.name}'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('File: ${recording.name}.csv'),
-                Text('Size: ${recording.size}'),
-                Text('Created: ${_formatDateTime(recording.timestamp)}'),
-                Text('Path: ${recording.filePath}'),
-                const SizedBox(height: 16),
-                const Text('Sample Data:', style: TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const SingleChildScrollView(
-                      child: Text(
-                        'timestamp,accelerometer_x,accelerometer_y,accelerometer_z,gyroscope_x,gyroscope_y,gyroscope_z,activity\n'
-                        '2024-01-15T10:30:00.123Z,0.123,-9.456,0.789,0.012,-0.034,0.056,Walk\n'
-                        '2024-01-15T10:30:00.143Z,0.145,-9.423,0.812,0.015,-0.031,0.052,Walk\n'
-                        '2024-01-15T10:30:00.163Z,0.167,-9.389,0.834,0.018,-0.028,0.048,Walk\n'
-                        '...',
-                        style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+  Future<void> _previewRecording(RecordingItem recording) async {
+    try {
+      final file = File(recording.filePath);
+      final content = await file.readAsString();
+
+      if (!mounted) return;
+      
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Preview: ${recording.name}'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 300,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('File: ${recording.name}.csv'),
+                  Text('Size: ${recording.size}'),
+                  Text('Created: ${_formatDateTime(recording.timestamp)}'),
+                  Text('Path: ${recording.filePath}'),
+                  const SizedBox(height: 16),
+                  const Text('Sample Data:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          content.length > 500 ? '${content.substring(0, 500)}...' : content,
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        );
-      },
-    );
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error reading file: $e')),
+      );
+    }
   }
 
-  void _shareRecording(RecordingItem recording) {
-    // TODO: Implement actual sharing functionality
+  Future<void> _shareRecording(RecordingItem recording) async {
+    // TODO: Implement sharing using share_plus package
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Sharing ${recording.name}...')),
     );
   }
 
-  void _exportRecording(RecordingItem recording) {
-    // TODO: Implement actual export functionality
+  Future<void> _exportRecording(RecordingItem recording) async {
+    // TODO: Implement export functionality
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Exporting ${recording.name}...')),
     );
   }
 
-  void _deleteRecording(RecordingItem recording, int index) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Delete Recording'),
-          content: Text('Are you sure you want to delete "${recording.name}"?\n\nThis action cannot be undone.'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _recordings.removeAt(index);
-                });
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${recording.name} deleted')),
-                );
-              },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
-            ),
-          ],
+  Future<void> _deleteRecording(RecordingItem recording, int index) async {
+    try {
+      final file = File(recording.filePath);
+      if (await file.exists()) {
+        await file.delete();
+
+        if (!mounted) return; // <- Guard here
+
+        setState(() {
+          _recordings.removeAt(index);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${recording.name} deleted')),
         );
-      },
-    );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting file: $e')),
+      );
+    }
   }
 }
 
@@ -285,7 +304,7 @@ class RecordingItem {
   final DateTime timestamp;
   final String filePath;
 
-  const RecordingItem({ // Added 'const' constructor
+  const RecordingItem({
     required this.name,
     required this.size,
     required this.timestamp,
