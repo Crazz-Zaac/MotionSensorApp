@@ -1,0 +1,111 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Java JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+        cache: true
+        
+    - name: Install dependencies
+      run: flutter pub get
+      
+    - name: Analyze code
+      run: flutter analyze
+      
+    - name: Run tests
+      run: flutter test
+      
+    - name: Build APK
+      run: flutter build apk --release
+      
+    - name: Build App Bundle
+      run: flutter build appbundle --release
+      
+    - name: Upload APK artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: motion-sensor-app-apk
+        path: build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 30
+        
+    - name: Upload App Bundle artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: motion-sensor-app-bundle
+        path: build/app/outputs/bundle/release/app-release.aab
+        retention-days: 30
+        
+    - name: Generate build info
+      run: |
+        echo "Build completed successfully!" > build_info.txt
+        echo "Commit: ${{ github.sha }}" >> build_info.txt
+        echo "Branch: ${{ github.ref_name }}" >> build_info.txt
+        echo "Build time: $(date)" >> build_info.txt
+        echo "Flutter version: $(flutter --version | head -n 1)" >> build_info.txt
+        
+    - name: Upload build info
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-info
+        path: build_info.txt
+        retention-days: 30
+
+  test-build:
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Java JDK
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.16.0'
+        channel: 'stable'
+        cache: true
+        
+    - name: Install dependencies
+      run: flutter pub get
+      
+    - name: Build debug APK for testing
+      run: flutter build apk --debug
+      
+    - name: Verify APK structure
+      run: |
+        if [ -f "build/app/outputs/flutter-apk/app-debug.apk" ]; then
+          echo "✅ Debug APK built successfully"
+          ls -la build/app/outputs/flutter-apk/
+        else
+          echo "❌ Debug APK build failed"
+          exit 1
+        fi
+
