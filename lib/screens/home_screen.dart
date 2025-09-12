@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:motion_sensor_app/screens/activities_screen.dart'; // Add this import
+// import 'package:flutter_tts/flutter_tts.dart';
+import 'package:motion_sensor_app/services/tts_service.dart'; // Import your TTS service
 import 'dart:async';
 import 'dart:math';
 
@@ -16,6 +18,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const MethodChannel _sensorChannel = MethodChannel('motion_sensor_app/sensors');
   static const MethodChannel _serviceChannel = MethodChannel('motion_sensor_app/service');
   static const EventChannel _sensorStream = EventChannel('motion_sensor_app/sensor_stream');
+
+  final TTSService _ttsService = TTSService();
+  Timer? _preNoticeTimer;
   
   StreamSubscription<dynamic>? _sensorSubscription;
   Timer? _recordingTimer;
@@ -55,6 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _calculateTotalDuration();
+    _initializeTTS();
   }
 
   @override
@@ -62,6 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
     _sensorSubscription?.cancel();
     _recordingTimer?.cancel();
     _activityTimer?.cancel();
+    _ttsService.dispose();
+    _preNoticeTimer?.cancel();
     super.dispose();
   }
 
@@ -74,6 +82,10 @@ class _HomeScreenState extends State<HomeScreen> {
     
     _totalDuration = _activitySequence.fold(0, (sum, activity) => sum + (activity['duration'] as int));
     _remainingSeconds = _totalDuration;
+  }
+
+  Future<void> _initializeTTS() async {
+    await _ttsService.initialize();
   }
 
   Future<void> _startRecording() async {
@@ -108,6 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentActivity = _activitySequence[0]['name'];
         _remainingSeconds = _totalDuration;
       });
+
+      // Initial announcement
+      final firstActivity = _activitySequence[0]['name'];
+      final firstDuration = _activitySequence[0]['duration'];
+      await _ttsService.speak('Get ready to $firstActivity for $firstDuration seconds');
       
       _startTimers();
       
@@ -115,6 +132,15 @@ class _HomeScreenState extends State<HomeScreen> {
       // print('Error starting recording: $e');
     }
   }
+
+  // Future<void> _safeSpeak(String text) async {
+  //   try {
+  //     await _ttsService.speak(text);
+  //   } catch (e) {
+  //     // print('TTS error: $e');
+  //     // You can show a visual indicator if TTS fails
+  //   }
+  // }
 
   Future<void> _stopRecording() async {
     try {
@@ -124,6 +150,10 @@ class _HomeScreenState extends State<HomeScreen> {
       _sensorSubscription?.cancel();
       _recordingTimer?.cancel();
       _activityTimer?.cancel();
+      _preNoticeTimer?.cancel();
+
+      // Announce manual stop
+      await _ttsService.speak('Recording stopped manually');
       
       setState(() {
         _isRecording = false;
@@ -146,14 +176,68 @@ class _HomeScreenState extends State<HomeScreen> {
         _elapsedSeconds++;
         _remainingSeconds = _totalDuration - _elapsedSeconds;
       });
+
+      // Check for activity completion
+      _checkActivityCompletion();
       
       if (_elapsedSeconds >= _totalDuration) {
         _stopRecording();
       }
+
+      // Schedule pre-notices for all activities
+      _schedulePreNotices();
+
     });
     
     // Activity progression timer
     _scheduleNextActivity();
+  }
+
+  void _schedulePreNotices() {
+    int accumulatedTime = 0;
+    
+    for (int i = 0; i < _activitySequence.length; i++) {
+      final activity = _activitySequence[i];
+      final int activityDuration = activity['duration'];
+      final int preNoticeTime = accumulatedTime + (activityDuration * 0.5).round();
+      
+      if (i < _activitySequence.length - 1) { // Not the last activity
+        final nextActivity = _activitySequence[i + 1]['name'];
+        
+        _preNoticeTimer = Timer(Duration(seconds: preNoticeTime), () {
+          _ttsService.speak('Get ready to $nextActivity');
+        });
+      }
+      
+      accumulatedTime += activityDuration;
+    }
+  }
+
+  void _checkActivityCompletion() {
+    int accumulatedTime = 0;
+    
+    for (int i = 0; i < _activitySequence.length; i++) {
+      final int activityDuration = _activitySequence[i]['duration'];
+      accumulatedTime += activityDuration;
+      
+      if (_elapsedSeconds == accumulatedTime) {
+        // Activity switch
+        if (i < _activitySequence.length - 1) {
+          // Not the last activity
+          final nextActivity = _activitySequence[i + 1]['name'];
+          _ttsService.speak('Start $nextActivity now');
+          
+          setState(() {
+            _currentActivityIndex = i + 1;
+            _currentActivity = nextActivity;
+          });
+        } else {
+          // Last activity completed
+          _ttsService.speak('End of recording');
+        }
+        break;
+      }
+    }
   }
 
   void _scheduleNextActivity() {
