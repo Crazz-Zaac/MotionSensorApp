@@ -9,7 +9,7 @@ class ActivitiesScreen extends StatefulWidget {
 }
 
 class _ActivitiesScreenState extends State<ActivitiesScreen> {
-  List<ActivityItem> _activities = [
+  final List<ActivityItem> _activities = [
     ActivityItem(name: 'Walk', duration: 10),
     ActivityItem(name: 'Sit', duration: 10),
     ActivityItem(name: 'Jump', duration: 10),

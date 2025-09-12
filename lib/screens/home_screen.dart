@@ -26,7 +26,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _totalDuration = 0;
   
   // Sample activity sequence for demo
-  List<Map<String, dynamic>> _activitySequence = [
+  final List<Map<String, dynamic>> _activitySequence = [
     {'name': 'Walk', 'duration': 10},
     {'name': 'Sit', 'duration': 10},
     {'name': 'Jump', 'duration': 10},
@@ -34,8 +34,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentActivityIndex = 0;
   
   // Sensor data for live plotting
-  List<double> _accelerometerData = [];
-  List<double> _gyroscopeData = [];
+  final List<double> _accelerometerData = [];
+  final List<double> _gyroscopeData = [];
   final int _maxDataPoints = 100;
   
   // Sampling rates
@@ -79,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _processSensorData(data);
         },
         onError: (error) {
-          print('Sensor stream error: $error');
+          // print('Sensor stream error: $error');
         },
       );
       
@@ -94,7 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _startTimers();
       
     } catch (e) {
-      print('Error starting recording: $e');
+      // print('Error starting recording: $e');
     }
   }
 
@@ -117,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       
     } catch (e) {
-      print('Error stopping recording: $e');
+      // print('Error stopping recording: $e');
     }
   }
 
