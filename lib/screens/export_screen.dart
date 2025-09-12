@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+// Remove unused import: import 'dart:io';
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -9,7 +9,7 @@ class ExportScreen extends StatefulWidget {
 }
 
 class _ExportScreenState extends State<ExportScreen> {
-  List<RecordingItem> _recordings = [
+  final List<RecordingItem> _recordings = [ // Added 'final' here
     RecordingItem(
       name: 'Recording_2024_01_15_10_30',
       size: '2.5 MB',
@@ -285,11 +285,10 @@ class RecordingItem {
   final DateTime timestamp;
   final String filePath;
 
-  RecordingItem({
+  const RecordingItem({ // Added 'const' constructor
     required this.name,
     required this.size,
     required this.timestamp,
     required this.filePath,
   });
 }
-
