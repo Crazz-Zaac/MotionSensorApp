@@ -20,7 +20,8 @@ class _HomeScreenState extends State<HomeScreen> {
   static const EventChannel _sensorStream = EventChannel('motion_sensor_app/sensor_stream');
 
   final TTSService _ttsService = TTSService();
-  List<Timer> _scheduledTimers = []; // Add this to track all timers
+  final List<Timer> _scheduledTimers = []; // Add this to track all timers
+  // int _currentActivityIndex = 0;
   Timer? _preNoticeTimer;
   
   StreamSubscription<dynamic>? _sensorSubscription;
@@ -42,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }).toList();
   }
   
-  int _currentActivityIndex = 0;
+  // int _currentActivityIndex = 0;
   
   // Sensor data for live plotting
   final List<double> _accelerometerData = [];
@@ -124,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isRecording = true;
         _elapsedSeconds = 0;
-        _currentActivityIndex = 0;  
+        // _currentActivityIndex = 0;  
         _currentActivity = _activitySequence[0]['name'];
         _remainingSeconds = _totalDuration;
       });
@@ -178,7 +179,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _remainingSeconds = _totalDuration;
         _accelerometerData.clear();
         _gyroscopeData.clear();
-        _currentActivityIndex = 0;
+        // _currentActivityIndex = 0;
       });
       
     } catch (e) {
@@ -215,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
     for (int i = 0; i < _activitySequence.length; i++) {
       final activity = _activitySequence[i];
       final int activityDuration = activity['duration'];
-      final String activityName = activity['name'];
+      // final String activityName = activity['name'];
       
       // Schedule pre-notice (at 50% of activity duration)
       if (i < _activitySequence.length - 1) { // Not the last activity
@@ -241,7 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _ttsService.speak('Start $nextActivity now');
             
             setState(() {
-              _currentActivityIndex = i + 1;
+              // _currentActivityIndex = i + 1;
               _currentActivity = nextActivity;
             });
           }
