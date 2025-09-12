@@ -18,21 +18,19 @@ void main() {
     // Let the widget tree settle
     await tester.pumpAndSettle();
 
-    // Basic sanity checks - more flexible approach
+    // Basic sanity checks
     expect(find.byType(MaterialApp), findsOneWidget);
     
     // Check that the app builds without throwing exceptions
     expect(tester.takeException(), isNull);
     
-    // Optional: Check for common widget types that should be present
-    // instead of specific button types
+    // Check for common widget types that should be present
     expect(find.byType(Scaffold), findsAtLeast(1));
     
-    // Look for any interactive elements instead of specific buttons
-    expect(find.byType(GestureDetector).hitTestable() | 
-           find.byType(InkWell).hitTestable() |
-           find.byType(TextButton).hitTestable() |
-           find.byType(ElevatedButton).hitTestable(), 
-           findsAtLeast(1));
+    // Look for any interactive elements - check each type separately
+    expect(find.byType(GestureDetector).hitTestable(), findsAtLeast(1));
+    expect(find.byType(InkWell).hitTestable(), findsAtLeast(1));
+    expect(find.byType(TextButton).hitTestable(), findsAtLeast(1));
+    expect(find.byType(ElevatedButton).hitTestable(), findsAtLeast(1));
   });
 }
