@@ -11,7 +11,14 @@ class ActivitiesScreen extends StatefulWidget {
 }
 
 class _ActivitiesScreenState extends State<ActivitiesScreen> {
-  final List<ActivityItem> _activities = [];
+  List<ActivityItem> _activities = [];
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize with the activities passed from main screen
+    _activities = List.from(widget.initialActivities);
+  }
 
   @override
   Widget build(BuildContext context) {

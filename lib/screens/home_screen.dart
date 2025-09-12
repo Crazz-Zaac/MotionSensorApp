@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _isRecording = true;
         _elapsedSeconds = 0;
-        _currentActivityIndex = 0;
+        _currentActivityIndex = 0;  
         _currentActivity = _activitySequence[0]['name'];
         _remainingSeconds = _totalDuration;
       });
@@ -166,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _currentActivity = _activitySequence[_currentActivityIndex]['name'];
           });
-          _scheduleNextActivity();
+          _scheduleNextActivity(); // Recursively schedule next activity
         }
       });
     }
