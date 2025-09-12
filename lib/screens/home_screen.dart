@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:motion_sensor_app/screens/activities_screen.dart'; // Add this import
 import 'dart:async';
 import 'dart:math';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final List<ActivityItem> activities; 
+  const HomeScreen({super.key, required this.activities}); // Update constructor
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -25,12 +27,15 @@ class _HomeScreenState extends State<HomeScreen> {
   int _remainingSeconds = 0;
   int _totalDuration = 0;
   
-  // Sample activity sequence for demo
-  final List<Map<String, dynamic>> _activitySequence = [
-    {'name': 'Walk', 'duration': 10},
-    {'name': 'Sit', 'duration': 10},
-    {'name': 'Jump', 'duration': 10},
-  ];
+   List<Map<String, dynamic>> get _activitySequence {
+    return widget.activities.map((activity) {
+      return {
+        'name': activity.name,
+        'duration': activity.duration,
+      };
+    }).toList();
+  }
+  
   int _currentActivityIndex = 0;
   
   // Sensor data for live plotting
@@ -61,11 +66,24 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _calculateTotalDuration() {
+    if (_activitySequence.isEmpty) {
+      _totalDuration = 0;
+      _remainingSeconds = 0;
+      return;
+    }
+    
     _totalDuration = _activitySequence.fold(0, (sum, activity) => sum + (activity['duration'] as int));
     _remainingSeconds = _totalDuration;
   }
 
   Future<void> _startRecording() async {
+    if (_activitySequence.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No activities configured. Please add activities first.')),
+      );
+      return;
+    }
+
     try {
       // Start sensors
       await _sensorChannel.invokeMethod('startSensors', {'samplingRates': _samplingRates});

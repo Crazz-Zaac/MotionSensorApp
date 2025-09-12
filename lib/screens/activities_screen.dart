@@ -2,18 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class ActivitiesScreen extends StatefulWidget {
-  const ActivitiesScreen({super.key});
+  final List<ActivityItem> initialActivities; 
+
+  const ActivitiesScreen({super.key, required this.initialActivities}); // Update constructor
 
   @override
   State<ActivitiesScreen> createState() => _ActivitiesScreenState();
 }
 
 class _ActivitiesScreenState extends State<ActivitiesScreen> {
-  final List<ActivityItem> _activities = [
-    ActivityItem(name: 'Walk', duration: 10),
-    ActivityItem(name: 'Sit', duration: 10),
-    ActivityItem(name: 'Jump', duration: 10),
-  ];
+  final List<ActivityItem> _activities = [];
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +20,12 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
         title: const Text('Activity Sequence'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.check),
+            onPressed: (){
+              Navigator.pop(context, _activities);
+            }, 
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: _addActivity,
@@ -205,9 +209,8 @@ class _ActivitiesScreenState extends State<ActivitiesScreen> {
                       // Add new activity
                       _activities.add(ActivityItem(name: name, duration: duration));
                     } else {
-                      // Edit existing activity
-                      _activities[index!] = ActivityItem(
-                        id: activity.id,
+                      // Edit existing activity using copyWith
+                      _activities[index!] = activity.copyWith(
                         name: name,
                         duration: duration,
                       );
@@ -242,6 +245,28 @@ class ActivityItem {
     required this.name,
     required this.duration,
   }) : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+  // Add copyWith method for easy updates
+  ActivityItem copyWith({
+    String? name,
+    int? duration,
+  }) {
+    return ActivityItem(
+      id: id, // Keep the same ID
+      name: name ?? this.name,
+      duration: duration ?? this.duration,
+    );
+  }
+
+  // Override equality operators
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is ActivityItem && other.id == id;
+  }
+
+  @override
+  int get hashCode => id.hashCode;
 
   @override
   String toString() {
