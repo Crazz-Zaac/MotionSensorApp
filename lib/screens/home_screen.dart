@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:motion_sensor_app/screens/activities_screen.dart';
 import 'package:motion_sensor_app/services/tts_service.dart';
 import 'dart:async';
+import 'package:motion_sensor_app/services/network_stream_service.dart';
 import 'dart:math';
 // import 'dart:convert';
 import 'dart:io'; // Add this import
@@ -25,6 +26,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Timer> _scheduledTimers = []; // Add this to track all timers
   // int _currentActivityIndex = 0;
   Timer? _preNoticeTimer;
+
+  final NetworkStreamService _networkStreamService = NetworkStreamService();
   
   StreamSubscription<dynamic>? _sensorSubscription;
   Timer? _recordingTimer;
@@ -79,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _calculateTotalDuration();
     _initializeTTS();
+    _initializeStreaming();
   }
 
   @override
@@ -95,6 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _scheduledTimers.clear();
     
     _ttsService.dispose();
+    _networkStreamService.dispose();
     super.dispose();
   }
 
@@ -117,6 +122,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _initializeStreaming() async {
+    // Initialize with default settings
+    await _networkStreamService.initialize();
+  }
+
   Future<void> _startRecording() async {
     if (_activitySequence.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -128,6 +138,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
 
       await _createRecordingFile();
+
+      // Start network streaming if enabled
+      await _networkStreamService.startStreaming();
 
       // Start sensors
       await _sensorChannel.invokeMethod('startSensors', {'samplingRates': _samplingRates});
@@ -220,6 +233,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _stopRecording() async {
     try {
+
+      // Stop network streaming
+      await _networkStreamService.stopStreaming();
 
       if (_csvBuffer.isNotEmpty) {
         await _flushCsvBuffer();
@@ -357,6 +373,9 @@ class _HomeScreenState extends State<HomeScreen> {
       
       // Store the latest readings
       _latestSensorReadings[sensorType] = [x, y, z];
+
+      // Stream data if enabled
+      _streamSensorData(sensorType, x, y, z, magnitude);
       
       // Update UI data for live plotting
       if (sensorType == 'accelerometer') {
@@ -383,6 +402,20 @@ class _HomeScreenState extends State<HomeScreen> {
         _lastCombinedRowTime = now;
       }
     }
+  }
+
+  void _streamSensorData(String sensorType, double x, double y, double z, double magnitude) {
+    final sensorData = {
+      'sensor_type': sensorType,
+      'x': x,
+      'y': y,
+      'z': z,
+      'magnitude': magnitude,
+      'current_activity': _currentActivity,
+      'elapsed_seconds': _elapsedSeconds,
+    };
+    
+    _networkStreamService.sendSensorData(sensorData);
   }
 
   void _addCombinedRowToBuffer() {
@@ -467,6 +500,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    // Add streaming status
+                    if (_networkStreamService.isStreaming)
+                      Text(
+                        'Streaming: ${_networkStreamService.connectionStatus}',
+                        style: TextStyle(
+                          color: _networkStreamService.isConnected ? Colors.green : Colors.orange,
+                          fontSize: 12,
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Text(
                       'Current Activity: $_currentActivity',

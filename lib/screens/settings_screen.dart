@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:motion_sensor_app/services/network_stream_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -27,6 +28,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _enableTTS = true;
   double _ttsVolume = 1.0;
   double _ttsSpeed = 0.5;
+
+  // Network settings
+  NetworkProtocol _selectedProtocol = NetworkProtocol.tcp;
+  String _streamHost = '127.0.0.1';
+  int _streamPort = 8080;
+  bool _enableStreaming = false;
 
   @override
   Widget build(BuildContext context) {
@@ -171,6 +178,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
+              ],
+            ],
+          ),
+
+          _buildSectionCard(
+            'Network Streaming',
+            [
+              SwitchListTile(
+                title: const Text('Enable Live Streaming'),
+                subtitle: const Text('Stream sensor data over network'),
+                value: _enableStreaming,
+                onChanged: (value) => setState(() => _enableStreaming = value),
+              ),
+              if (_enableStreaming) ...[
+                DropdownButtonFormField<NetworkProtocol>(
+                  value: _selectedProtocol,
+                  items: NetworkProtocol.values.map((protocol) {
+                    return DropdownMenuItem(
+                      value: protocol,
+                      child: Text(protocol.toString().split('.').last.toUpperCase()),
+                    );
+                  }).toList(),
+                  onChanged: (value) => setState(() => _selectedProtocol = value!),
+                  decoration: const InputDecoration(labelText: 'Protocol'),
+                ),
+                TextFormField(
+                  initialValue: _streamHost,
+                  decoration: const InputDecoration(labelText: 'Host IP'),
+                  onChanged: (value) => setState(() => _streamHost = value),
+                ),
+                Slider(
+                  value: _streamPort.toDouble(),
+                  min: 1024,
+                  max: 65535,
+                  divisions: 100,
+                  label: _streamPort.toString(),
+                  onChanged: (value) => setState(() => _streamPort = value.round()),
+                ),
+                Text('Port: $_streamPort'),
               ],
             ],
           ),
@@ -331,6 +377,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'enabled': _enableTTS,
         'volume': _ttsVolume,
         'speed': _ttsSpeed,
+      },
+      'streaming': {
+        'enabled': _enableStreaming,
+        'protocol': _selectedProtocol.toString(),
+        'host': _streamHost,
+        'port': _streamPort,
       },
     };
   }
