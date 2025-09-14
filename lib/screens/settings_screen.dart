@@ -193,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               if (_enableStreaming) ...[
                 DropdownButtonFormField<NetworkProtocol>(
-                  value: _selectedProtocol,
+                  initialValue: _selectedProtocol,
                   items: NetworkProtocol.values.map((protocol) {
                     return DropdownMenuItem(
                       value: protocol,
