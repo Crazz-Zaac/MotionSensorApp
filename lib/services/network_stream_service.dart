@@ -43,7 +43,7 @@ class NetworkStreamService {
       });
       
       _socket!.on('error', (error) {
-        debugdebugPrint('Socket error: $error');
+        debugPrint('Socket error: $error');
       });
       
       _socket!.connect();
