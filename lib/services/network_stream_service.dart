@@ -34,20 +34,20 @@ class NetworkStreamService {
       });
       
       _socket!.on('connect', (_) {
-        print('Connected to $_host:$_port');
+        debugPrint('Connected to $_host:$_port');
       });
       
       _socket!.on('disconnect', (_) {
-        print('Disconnected from $_host:$_port');
+        debugPrint('Disconnected from $_host:$_port');
       });
       
       _socket!.on('error', (error) {
-        print('Socket error: $error');
+        debugdebugPrint('Socket error: $error');
       });
       
       _socket!.connect();
     } catch (e) {
-      print('Error initializing socket: $e');
+      debugPrint('Error initializing socket: $e');
     }
   }
   
@@ -79,7 +79,7 @@ class NetworkStreamService {
       
       _socket!.emit('sensor_data', jsonData);
     } catch (e) {
-      print('Error sending sensor data: $e');
+      debugPrint('Error sending sensor data: $e');
     }
   }
   

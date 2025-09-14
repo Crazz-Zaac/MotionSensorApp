@@ -2,6 +2,7 @@ import socket
 import json
 from datetime import datetime
 
+
 def start_tcp_server(host='127.0.0.1', port=8080):
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind((host, port))
