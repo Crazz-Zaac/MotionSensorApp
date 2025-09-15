@@ -36,6 +36,7 @@ dependencies:
   share_plus: ^10.0.0
   socket_io_client: ^2.0.3  # For TCP/UDP communication
   network_info_plus: ^5.0.1  # For getting device IP address
+  shared_preferences: ^2.5.3
   
 
 

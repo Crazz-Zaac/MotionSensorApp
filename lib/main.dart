@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 // import 'package:flutter/foundation.dart';
+import 'package:motion_sensor_app/services/activities_persistence_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/activities_screen.dart';
 import 'screens/export_screen.dart';
@@ -40,8 +41,56 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // Note: activities can be loaded from disk or a DB in initState if needed.
   List<ActivityItem> _activities = <ActivityItem>[];
 
+  bool _isLoadingActivities = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivities();
+  }
+
+  Future<void> _loadActivities() async {
+    try {
+      final activities = await ActivitiesPersistenceService.loadActivities();
+      setState(() {
+        _activities = activities;
+        _isLoadingActivities = false;
+      });
+      debugPrint('Loaded ${activities.length} activities in main screen');
+    } catch (e) {
+      debugPrint('Error loading activities in main screen: $e');
+      setState(() {
+        _isLoadingActivities = false;
+      });
+    }
+  }
+
+  Future<void> _saveActivities() async {
+    try {
+      await ActivitiesPersistenceService.saveActivities(_activities);
+      debugPrint('Saved ${_activities.length} activities from main screen');
+    } catch (e) {
+      debugPrint('Error saving activities from main screen: $e');
+    }
+  }
+
   // Builds the currently selected screen, passing activities to HomeScreen.
   Widget _currentScreen() {
+     if (_isLoadingActivities) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading activities...'),
+            ],
+          ),
+        ),
+      );
+    }
+
     switch (_selectedIndex) {
       case 0:
         // pass activities here — HomeScreen expects this required parameter
@@ -68,26 +117,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Future<void> _navigateToActivitiesScreen() async {
-    // Navigate to ActivitiesScreen and wait for result
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ActivitiesScreen(initialActivities: _activities),
-      ),
-    );
+    try {
+      final result = await Navigator.push<List<ActivityItem>>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ActivitiesScreen(initialActivities: _activities),
+        ),
+      );
 
-    // Update activities if we got a result
-    if (result != null && result is List<ActivityItem>) {
+      if (result != null) {
+        setState(() {
+          _activities = result;
+        });
+        
+        // Auto-save activities when returned from Activities screen
+        await _saveActivities();
+        
+        debugPrint('Updated activities from Activities screen: ${_activities.length} items');
+      } else {
+        debugPrint('No result returned from ActivitiesScreen');
+      }
+      
+      // Always switch back to Home tab
       setState(() {
-        _activities = result;
-        debugPrint('Updated activities: ${_activities.length} items');
+        _selectedIndex = 0;
       });
-      setState(() {
-        _selectedIndex = 0; // Switch back to Home tab
-      });
-    }else{
-      debugPrint('No valid result returned from ActivitiesScreen');
-      // Still switch back to Home tab
+    } catch (e) {
+      debugPrint('Error navigating to Activities screen: $e');
       setState(() {
         _selectedIndex = 0;
       });

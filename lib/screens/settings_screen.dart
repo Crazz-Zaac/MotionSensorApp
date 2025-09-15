@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:motion_sensor_app/services/network_stream_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -35,12 +37,131 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _streamPort = 8080;
   bool _enableStreaming = false;
 
+  // Controllers for text fields
+  final TextEditingController _hostController = TextEditingController();
+  final TextEditingController _portController = TextEditingController();
+
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    _hostController.dispose();
+    _portController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      setState(() {
+        // Sampling rates
+        _accelerometerRate = prefs.getDouble('accelerometer_rate') ?? 50.0;
+        _gyroscopeRate = prefs.getDouble('gyroscope_rate') ?? 50.0;
+        _magnetometerRate = prefs.getDouble('magnetometer_rate') ?? 50.0;
+        _rotationVectorRate = prefs.getDouble('rotation_vector_rate') ?? 50.0;
+
+        // Pre-notice settings
+        _usePercentageMode = prefs.getBool('use_percentage_mode') ?? true;
+        _preNoticePercentage = prefs.getDouble('pre_notice_percentage') ?? 50.0;
+        _preNoticeSeconds = prefs.getInt('pre_notice_seconds') ?? 5;
+
+        // File format settings
+        _useCSVFormat = prefs.getBool('use_csv_format') ?? true;
+        _useForegroundService = prefs.getBool('use_foreground_service') ?? true;
+
+        // TTS settings
+        _enableTTS = prefs.getBool('enable_tts') ?? true;
+        _ttsVolume = prefs.getDouble('tts_volume') ?? 1.0;
+        _ttsSpeed = prefs.getDouble('tts_speed') ?? 0.5;
+
+        // Network settings
+        _enableStreaming = prefs.getBool('enable_streaming') ?? false;
+        _streamHost = prefs.getString('stream_host') ?? '127.0.0.1';
+        _streamPort = prefs.getInt('stream_port') ?? 8080;
+        
+        String protocolString = prefs.getString('stream_protocol') ?? 'tcp';
+        _selectedProtocol = protocolString == 'udp' ? NetworkProtocol.udp : NetworkProtocol.tcp;
+
+        // Initialize text controllers
+        _hostController.text = _streamHost;
+        _portController.text = _streamPort.toString();
+        
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading settings: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+   Future<void> _saveSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Sampling rates
+      await prefs.setDouble('accelerometer_rate', _accelerometerRate);
+      await prefs.setDouble('gyroscope_rate', _gyroscopeRate);
+      await prefs.setDouble('magnetometer_rate', _magnetometerRate);
+      await prefs.setDouble('rotation_vector_rate', _rotationVectorRate);
+
+      // Pre-notice settings
+      await prefs.setBool('use_percentage_mode', _usePercentageMode);
+      await prefs.setDouble('pre_notice_percentage', _preNoticePercentage);
+      await prefs.setInt('pre_notice_seconds', _preNoticeSeconds);
+
+      // File format settings
+      await prefs.setBool('use_csv_format', _useCSVFormat);
+      await prefs.setBool('use_foreground_service', _useForegroundService);
+
+      // TTS settings
+      await prefs.setBool('enable_tts', _enableTTS);
+      await prefs.setDouble('tts_volume', _ttsVolume);
+      await prefs.setDouble('tts_speed', _ttsSpeed);
+
+      // Network settings
+      await prefs.setBool('enable_streaming', _enableStreaming);
+      await prefs.setString('stream_host', _streamHost);
+      await prefs.setInt('stream_port', _streamPort);
+      await prefs.setString('stream_protocol', _selectedProtocol.toString().split('.').last);
+      
+    } catch (e) {
+      debugPrint('Error saving settings: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: () async {
+              await _saveSettings();
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Settings saved')),
+              );
+            },
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16.0),
@@ -182,6 +303,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
 
+          const SizedBox(height: 16),
+
+          // Network Streaming Section
           _buildSectionCard(
             'Network Streaming',
             [
@@ -189,7 +313,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: const Text('Enable Live Streaming'),
                 subtitle: const Text('Stream sensor data over network'),
                 value: _enableStreaming,
-                onChanged: (value) => setState(() => _enableStreaming = value),
+                 onChanged: (value) async {
+                  setState(() => _enableStreaming = value);
+                  await _saveSettings(); // Auto-save streaming toggle
+                }, // Auto-save streaming toggle
               ),
               if (_enableStreaming) ...[
                 DropdownButtonFormField<NetworkProtocol>(
@@ -201,22 +328,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     );
                   }).toList(),
                   onChanged: (value) => setState(() => _selectedProtocol = value!),
-                  decoration: const InputDecoration(labelText: 'Protocol'),
+                  decoration: const InputDecoration(labelText: 'Protocol', border: OutlineInputBorder(),),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   initialValue: _streamHost,
-                  decoration: const InputDecoration(labelText: 'Host IP'),
+                    decoration: const InputDecoration(labelText: 'Host IP', 
+                    hintText: '127.0.0.1 or 192.168.1.100',
+                    border: OutlineInputBorder(),
+                  ),
                   onChanged: (value) => setState(() => _streamHost = value),
                 ),
-                Slider(
-                  value: _streamPort.toDouble(),
-                  min: 1024,
-                  max: 65535,
-                  divisions: 100,
-                  label: _streamPort.toString(),
-                  onChanged: (value) => setState(() => _streamPort = value.round()),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _portController,
+                  decoration: const InputDecoration(
+                    labelText: 'Port Number',
+                    hintText: '8080',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(5),
+                  ],
+                  onChanged: (value){
+                    final port = int.tryParse(value);
+                    if (port != null && port >= 1024 && port <= 65535) {
+                      _streamPort = port;
+                    }
+                  },
                 ),
-                Text('Port: $_streamPort'),
+
+                const SizedBox(height: 8,),
+                Text(
+                  'Port range: 1024 - 65535',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16,),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Stream Endpoint: ',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 4,),
+                      SelectableText(
+                        '${_selectedProtocol.toString().split('.').last.toUpperCase()}://$_streamHost:$_streamPort',
+                        style: const TextStyle(fontFamily: 'monospace'),
+                      )
+                    ],
+                  ),
+                )
               ],
             ],
           ),
@@ -309,7 +479,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 setState(() {
                   _accelerometerRate = 50.0;
                   _gyroscopeRate = 50.0;
@@ -322,8 +492,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _useForegroundService = true;
                   _enableTTS = true;
                   _ttsVolume = 1.0;
-                  _ttsSpeed = 0.5; // Slower default
+                  _ttsSpeed = 0.5;
+                  _enableStreaming = false;
+                  _streamHost = '127.0.0.1';
+                  _streamPort = 8080;
+                  _selectedProtocol = NetworkProtocol.tcp;
+                  
+                  _hostController.text = _streamHost;
+                  _portController.text = _streamPort.toString();
                 });
+                await _saveSettings();
+                if (!context.mounted) return;
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Settings reset to defaults')),
@@ -352,6 +531,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Text('• TTS announcements for activity transitions'),
         const Text('• Export data as CSV or JSON files'),
         const Text('• Background recording with foreground service'),
+        const Text('• Live streaming of sensor data over network'),
       ],
     );
   }
