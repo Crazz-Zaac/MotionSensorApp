@@ -11,10 +11,8 @@ import 'package:motion_sensor_app/main.dart';
 
 void main() {
   testWidgets('App builds without exceptions', (WidgetTester tester) async {
-    // Simply test that the app can be built without crashing
-    expect(() async {
-      await tester.pumpWidget(const MotionSensorApp());
-      await tester.pumpAndSettle();
-    }, returnsNormally);
+    await tester.pumpWidget(const MotionSensorApp());
+    await tester.pump(); // just triggers a single frame
   });
+
 }
