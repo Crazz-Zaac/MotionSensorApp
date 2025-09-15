@@ -360,17 +360,23 @@ class _ExportScreenState extends State<ExportScreen> {
 
   Future<void> _shareRecording(RecordingItem recording) async {
     try {
-      final file = File(recording.filePath);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Motion sensor recording - ${recording.name}',
+      final file = XFile(recording.filePath);
+      final params = ShareParams(
+        text: 'Check out this motion sensor recording: ${recording.name}',
         subject: 'Motion Sensor Data',
+        files: [file],
+        sharePositionOrigin: Rect.zero, // Optional: Use if sharing from a specific UI element
       );
+
+      final result = await SharePlus.instance.share(params);
+
+      if (result.status == ShareResultStatus.success) {
+        // print('Successfully shared the recording!');
+      } else {
+        // print('Sharing was dismissed or failed.');
+      }
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sharing file: $e')),
-      );
+      // print('Error sharing recording: $e');
     }
   }
 
